@@ -4,11 +4,11 @@ import { type PageProps } from "$fresh/server.ts";
 const JSONLD = {
   "@context": "http://www.schema.org",
   "@type": "WebSite",
-  "name": "DebateThing.com",
-  "url": "https://www.debatething.com",
+  "name": "",
+  "url": "https://www.",
   "image": {
     "@type": "ImageObject",
-    "url": "https://www.debatething.com/android-chrome-512x512.png",
+    "url": "https://www./android-chrome-512x512.png",
     "width": 512,
     "height": 512,
   },
