@@ -29,21 +29,64 @@ const SECURITY_HEADERS: Record<string, string> = {
   "X-Download-Options": "noopen",
   "X-Frame-Options": "SAMEORIGIN",
   "X-Permitted-Cross-Domain-Policies": "none",
-  "X-XSS-Protection": "0",
+  "X-XSS-Protection": "1; mode=block",
 };
 
-const CONTENT_TYPES: Map<string, string> = new Map([
-  [".css", "text/css; charset=utf-8"],
-  [".html", "text/html; charset=utf-8"],
-  [".jpeg", "image/jpeg"],
-  [".jpg", "image/jpeg"],
-  [".js", "application/javascript"],
-  [".json", "application/json"],
-  [".mp3", "audio/mpeg"],
-  [".png", "image/png"],
-  [".svg", "image/svg+xml"],
-  [".webmanifest", "application/manifest+json"],
-]);
+const MIME_TYPES: Record<string, string> = {
+  // Text
+  ".html": "text/html; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".js": "application/javascript; charset=utf-8",
+  ".json": "application/json",
+  ".xml": "application/xml",
+  ".txt": "text/plain",
+  ".md": "text/markdown",
+  ".webmanifest": "application/manifest+json",
+
+  // Images
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".svg": "image/svg+xml",
+  ".webp": "image/webp",
+  ".ico": "image/x-icon",
+
+  // Audio
+  ".mp3": "audio/mpeg",
+  ".wav": "audio/wav",
+  ".ogg": "audio/ogg",
+
+  // Video
+  ".mp4": "video/mp4",
+  ".webm": "video/webm",
+
+  // Fonts
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
+  ".ttf": "font/ttf",
+  ".otf": "font/otf",
+  ".eot": "application/vnd.ms-fontobject",
+
+  // Documents
+  ".pdf": "application/pdf",
+  ".doc": "application/msword",
+  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".xls": "application/vnd.ms-excel",
+  ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ".ppt": "application/vnd.ms-powerpoint",
+  ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+
+  // Archives
+  ".zip": "application/zip",
+  ".rar": "application/x-rar-compressed",
+  ".7z": "application/x-7z-compressed",
+  ".tar": "application/x-tar",
+  ".gz": "application/gzip",
+
+  // Other
+  ".wasm": "application/wasm",
+};
 
 const CACHEABLE_EXTENSIONS: Set<string> = new Set([".css", ".jpg", ".js", ".png", ".svg"]);
 
@@ -54,9 +97,11 @@ const setSecurityHeaders = (headers: Headers): void => {
 };
 
 const setContentType = (headers: Headers, path: string): void => {
-  const extension = path.substring(path.lastIndexOf("."));
-  const contentType = CONTENT_TYPES.get(extension);
-  if (contentType) headers.set("Content-Type", contentType);
+  const extension = path.substring(path.lastIndexOf(".")).toLowerCase();
+  const mimeType = MIME_TYPES[extension];
+  if (mimeType) {
+    headers.set("Content-Type", mimeType);
+  }
 };
 
 const setCacheControl = (headers: Headers, path: string): void => {
@@ -80,12 +125,8 @@ const setETag = (headers: Headers, path: string): void => {
   }
 };
 
-const applyHeaders = (headers: Headers, path: string): void => {
-  [setSecurityHeaders, setContentType, setCacheControl, setETag]
-    .forEach((fn) => fn(headers, path));
-};
-
-const setCorsHeaders = (headers: Headers, method: string, origin: string): void => {
+const setCorsHeaders = (headers: Headers, method: string, origin: string | null): void => {
+  if (!origin) return;
   if (method === "OPTIONS") {
     headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
   } else {
@@ -104,6 +145,15 @@ const deleteXPowerBy = (headers: Headers): void => {
   headers.delete("X-Powered-By");
 };
 
+const applyHeaders = (headers: Headers, path: string, method: string, origin: string | null): void => {
+  setSecurityHeaders(headers);
+  setCacheControl(headers, path);
+  setETag(headers, path);
+  setContentType(headers, path);
+  setCorsHeaders(headers, method, origin);
+  deleteXPowerBy(headers);
+};
+
 export default async function handler(req: Request, ctx: FreshContext) {
   try {
     const origin = req.headers.get("Origin");
@@ -112,16 +162,10 @@ export default async function handler(req: Request, ctx: FreshContext) {
     }
     const resp = await ctx.next();
     const path = new URL(req.url).pathname;
-    if (origin) {
-      setCorsHeaders(resp.headers, req.method, origin);
-    }
-    if (!path.startsWith("/_frsh/")) {
-      applyHeaders(resp.headers, path);
-    }
-    deleteXPowerBy(resp.headers);
+    applyHeaders(resp.headers, path, req.method, origin);
     return resp;
   } catch (error) {
-    console.error("Error in security middleware:", error);
+    console.error("Security headers middleware error:", error);
     return new Response("Internal Server Error", { status: 500 });
   }
 }

@@ -16,11 +16,6 @@ const config: EnvConfig = {
   BLOCK_THRESHOLD: Math.max(1, parseInt(Deno.env.get("RATE_LIMIT_BLOCK_THRESHOLD") || "5")),
 };
 
-const WINDOW_SIZE = config.WINDOW_SIZE; // 1 minute in milliseconds
-const MAX_REQUESTS = config.MAX_REQUESTS; // Maximum requests per minute
-const MAX_BLOCKED_TIME = config.MAX_BLOCKED_TIME; // 30 minutes in milliseconds
-const BLOCK_THRESHOLD = config.BLOCK_THRESHOLD; // Number of rate limit violations before blocking
-
 interface RateLimitEntry {
   bucket: number;
   lastRequest: number;
@@ -46,7 +41,7 @@ export default async function handler(req: Request, ctx: FreshContext) {
 
   let entry = store.get(ip);
   if (!entry) {
-    entry = { bucket: MAX_REQUESTS, lastRequest: now, violations: 0, blockedUntil: 0 };
+    entry = { bucket: config.MAX_REQUESTS, lastRequest: now, violations: 0, blockedUntil: 0 };
     store.set(ip, entry);
   }
 
@@ -110,7 +105,7 @@ export default async function handler(req: Request, ctx: FreshContext) {
 
   headers.set("X-RateLimit-Limit", config.MAX_REQUESTS.toString());
   headers.set("X-RateLimit-Remaining", Math.floor(entry.bucket).toString());
-  headers.set("X-RateLimit-Reset", (now + WINDOW_SIZE).toString());
+  headers.set("X-RateLimit-Reset", (now + config.WINDOW_SIZE).toString());
 
   return resp;
 }

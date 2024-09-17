@@ -71,7 +71,8 @@ export default async function handler(req: Request, ctx: FreshContext) {
     }
 
     const response = await ctx.next();
-    const updatedResponse = new Response(response.body, response);
+    const clonedResponse = response.clone();
+    const updatedResponse = new Response(clonedResponse.body, clonedResponse);
     const newToken = await generateToken();
     setCookie(updatedResponse.headers, {
       name: CSRF_COOKIE_NAME,

@@ -15,9 +15,8 @@ const MIN_SIZE = 1024; // Only compress responses larger than 1KB
 
 export default async function handler(req: Request, ctx: FreshContext) {
   const resp = await ctx.next();
-  const headers = resp.headers;
+  const headers = new Headers(resp.headers);
 
-  // Skip compression if already encoded or for event streams
   if (headers.get("Content-Encoding") || headers.get("Content-Type") === "text/event-stream") {
     return resp;
   }
@@ -27,38 +26,37 @@ export default async function handler(req: Request, ctx: FreshContext) {
     return resp;
   }
 
-  // Check if the client accepts Brotli compression
   const acceptEncoding = req.headers.get("accept-encoding");
+  const body = await resp.arrayBuffer();
+
+  if (body.byteLength <= MIN_SIZE) {
+    return new Response(body, {
+      status: resp.status,
+      statusText: resp.statusText,
+      headers,
+    });
+  }
+
   if (acceptEncoding?.includes("br")) {
     try {
-      const body = await resp.arrayBuffer();
-
-      // Only compress if there's a substantial body to compress
-      if (body.byteLength > MIN_SIZE) {
-        const compressedBody = compress(new Uint8Array(body));
-
-        headers.set("Content-Encoding", "br");
-        headers.set("Content-Length", compressedBody.length.toString());
-        headers.set("Vary", "Accept-Encoding");
-
-        return new Response(compressedBody, {
-          status: resp.status,
-          statusText: resp.statusText,
-          headers,
-        });
-      }
+      const compressedBody = compress(new Uint8Array(body));
+      headers.set("Content-Encoding", "br");
+      headers.set("Content-Length", compressedBody.length.toString());
+      headers.set("Vary", "Accept-Encoding");
+      return new Response(compressedBody, {
+        status: resp.status,
+        statusText: resp.statusText,
+        headers,
+      });
     } catch (error) {
       console.error("Brotli compression failed:", error);
-      // Fall back to uncompressed response
     }
   } else if (acceptEncoding?.includes("gzip")) {
     try {
-      const body = await resp.arrayBuffer();
       const compressedBody = gzip(new Uint8Array(body));
       headers.set("Content-Encoding", "gzip");
       headers.set("Content-Length", compressedBody.length.toString());
       headers.set("Vary", "Accept-Encoding");
-
       return new Response(compressedBody, {
         status: resp.status,
         statusText: resp.statusText,
@@ -69,5 +67,9 @@ export default async function handler(req: Request, ctx: FreshContext) {
     }
   }
 
-  return resp;
+  return new Response(body, {
+    status: resp.status,
+    statusText: resp.statusText,
+    headers,
+  });
 }
