@@ -14,3 +14,12 @@ deno task start
 ```
 
 This will watch the project directory and restart as necessary.
+
+## Required ENV variables
+
+```
+APP_KEY
+OPENAI_API_KEY
+OPENAI_ORGANIZATION
+OPENAI_PROJECT
+```
