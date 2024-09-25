@@ -7,6 +7,7 @@ export const safelyAwait = async <T, E = Error>(promise: Promise<T>): Promise<[n
   }
 };
 
+// deno-lint-ignore no-explicit-any
 export function debounce<T extends (...args: any[]) => any>(func: T, wait: number): (...args: Parameters<T>) => void {
   let timeout: number | undefined;
   return (...args: Parameters<T>) => {
