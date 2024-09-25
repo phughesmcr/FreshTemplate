@@ -1,13 +1,8 @@
 import type { FreshContext } from "$fresh/server.ts";
 import { encodeHex } from "@std/encoding/hex";
 import { md5 } from "@takker/md5";
-
-const ALLOWED_ORIGINS: string[] = [
-  "http://localhost",
-  "http://localhost:8000",
-  "http://127.0.0.1",
-  "http://127.0.0.1:8000",
-];
+import { isProtectedRoute } from "lib/middlewares/protectedRoutes.ts";
+import type { ServerState } from "./state.ts";
 
 const SECURITY_HEADERS: Record<string, string> = {
   // "Access-Control-Allow-Origin": "https://trusted-site.com",
@@ -90,8 +85,6 @@ const MIME_TYPES: Record<string, string> = {
 
 const CACHEABLE_EXTENSIONS: Set<string> = new Set([".css", ".jpg", ".js", ".png", ".svg"]);
 
-const SENSITIVE_PATHS = new Set(["/api"]);
-
 const setSecurityHeaders = (headers: Headers): void => {
   Object.entries(SECURITY_HEADERS).forEach(([key, value]) => headers.set(key, value));
 };
@@ -105,7 +98,7 @@ const setContentType = (headers: Headers, path: string): void => {
 };
 
 const setCacheControl = (headers: Headers, path: string): void => {
-  if (SENSITIVE_PATHS.has(path)) {
+  if (isProtectedRoute(path)) {
     headers.set("Cache-Control", "no-store, max-age=0");
     headers.set("Pragma", "no-cache");
     headers.set("Expires", "0");
@@ -154,12 +147,10 @@ const applyHeaders = (headers: Headers, path: string, method: string, origin: st
   deleteXPowerBy(headers);
 };
 
-export default async function handler(req: Request, ctx: FreshContext) {
+export default async function securityHeaders(req: Request, ctx: FreshContext<ServerState>) {
+  if (!ctx.destination) return ctx.next();
   try {
     const origin = req.headers.get("Origin");
-    if (origin && !ALLOWED_ORIGINS.includes(origin)) {
-      return new Response("Forbidden", { status: 403 });
-    }
     const resp = await ctx.next();
     const path = new URL(req.url).pathname;
     applyHeaders(resp.headers, path, req.method, origin);

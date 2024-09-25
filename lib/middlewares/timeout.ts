@@ -1,8 +1,10 @@
-import { FreshContext } from "$fresh/server.ts";
+import type { FreshContext } from "$fresh/server.ts";
+import type { ServerState } from "./state.ts";
 
 const TIMEOUT_MS = 30000; // 30 seconds
 
-export default async function handler(_req: Request, ctx: FreshContext) {
+export default async function timeout(_req: Request, ctx: FreshContext<ServerState>): Promise<Response> {
+  if (!ctx.destination) return ctx.next();
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
@@ -14,7 +16,7 @@ export default async function handler(_req: Request, ctx: FreshContext) {
       }),
     ]);
     clearTimeout(timeoutId);
-    return res;
+    return res as Response;
   } catch (error) {
     if (error.message === "Request timeout") {
       return new Response("Request timed out", { status: 504 });

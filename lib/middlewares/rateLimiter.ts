@@ -1,4 +1,5 @@
 import type { FreshContext } from "$fresh/server.ts";
+import type { ServerState } from "./state.ts";
 
 // Add type for environment variables
 interface EnvConfig {
@@ -11,7 +12,7 @@ interface EnvConfig {
 // Load configuration from environment
 const config: EnvConfig = {
   WINDOW_SIZE: Math.max(1, parseInt(Deno.env.get("RATE_LIMIT_WINDOW_SIZE") || "60000")),
-  MAX_REQUESTS: Math.max(1, parseInt(Deno.env.get("RATE_LIMIT_MAX_REQUESTS") || "100")),
+  MAX_REQUESTS: Math.max(1, parseInt(Deno.env.get("RATE_LIMIT_MAX_REQUESTS") || "250")),
   MAX_BLOCKED_TIME: Math.max(1, parseInt(Deno.env.get("RATE_LIMIT_MAX_BLOCKED_TIME") || "1800000")),
   BLOCK_THRESHOLD: Math.max(1, parseInt(Deno.env.get("RATE_LIMIT_BLOCK_THRESHOLD") || "5")),
 };
@@ -32,7 +33,8 @@ function updateBucket(entry: RateLimitEntry, now: number): void {
   entry.lastRequest = now;
 }
 
-export default async function handler(req: Request, ctx: FreshContext) {
+export default async function rateLimiter(req: Request, ctx: FreshContext<ServerState>) {
+  if (!ctx.destination) return ctx.next();
   const ip = req.headers.get("x-forwarded-for") || ctx.remoteAddr.hostname;
   if (!ip) {
     return new Response("IP address not found", { status: 403 });

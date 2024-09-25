@@ -1,6 +1,7 @@
 import type { FreshContext } from "$fresh/server.ts";
 import { compress } from "brotli";
 import { gzip } from "compress";
+import type { ServerState } from "./state.ts";
 
 const COMPRESSIBLE_TYPES = [
   "text/",
@@ -13,7 +14,8 @@ const COMPRESSIBLE_TYPES = [
 
 const MIN_SIZE = 1024; // Only compress responses larger than 1KB
 
-export default async function handler(req: Request, ctx: FreshContext) {
+export default async function Compression(req: Request, ctx: FreshContext<ServerState>) {
+  if (!ctx.destination) return ctx.next();
   const resp = await ctx.next();
   const headers = new Headers(resp.headers);
 
