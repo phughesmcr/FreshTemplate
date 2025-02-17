@@ -6,7 +6,10 @@ export const PROTECTED_ROUTES = ["/api", "/auth", "/chat", "/user"] as const;
 
 export const isProtectedRoute = (path: string) => PROTECTED_ROUTES.includes(path as typeof PROTECTED_ROUTES[number]);
 
-export default function protectedRouteHandler(req: Request, ctx: FreshContext<ServerState>) {
+export default async function protectedRouteHandler(
+  req: Request,
+  ctx: FreshContext<ServerState>,
+): Promise<Response> {
   if (!ctx.destination) return ctx.next();
   const url = new URL(req.url);
   const headers = new Headers(req.headers);
@@ -24,7 +27,10 @@ export default function protectedRouteHandler(req: Request, ctx: FreshContext<Se
 
         // this is where supabase etc would go
 
-        ctx.state.user = crypto.randomUUID();
+        ctx.state.user = {
+          id: crypto.randomUUID(),
+          username: "user", // or get from your auth system
+        };
       } else {
         console.warn("Session middleware is not properly set up");
         return new Response(null, { status: 500 });
@@ -44,5 +50,6 @@ export default function protectedRouteHandler(req: Request, ctx: FreshContext<Se
     return new Response(null, { headers, status: 303 });
   }
 
-  return ctx.next();
+  const response = await ctx.next();
+  return response;
 }

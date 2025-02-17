@@ -18,8 +18,8 @@ export default async function timeout(_req: Request, ctx: FreshContext<ServerSta
     clearTimeout(timeoutId);
     return res as Response;
   } catch (error) {
-    if (error.message === "Request timeout") {
-      return new Response("Request timed out", { status: 504 });
+    if (error instanceof Error && error.message === "Request timeout") {
+      return new Response("Request timeout", { status: 408 });
     }
     throw error;
   }

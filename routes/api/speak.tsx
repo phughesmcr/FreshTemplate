@@ -1,5 +1,6 @@
 import type { Handlers } from "$fresh/server.ts";
 import { openai } from "lib/openai.ts";
+import { encodeBase64 } from "@std/encoding";
 
 /**
  * @module voicesynth
@@ -116,7 +117,9 @@ export const handler: Handlers<VoiceSynthRequest | null, unknown> = {
       });
     } catch (error) {
       return new Response(
-        JSON.stringify({ error: error.message ?? "An error occurred during voice synthesis" }),
+        JSON.stringify({
+          error: error instanceof Error ? error.message : "An error occurred during voice synthesis",
+        }),
         {
           status: 500,
           headers: { "Content-Type": "application/json" },
