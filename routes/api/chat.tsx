@@ -1,6 +1,6 @@
 import type { Handlers } from "$fresh/server.ts";
 import { openai } from "lib/openai.ts";
-import type { OpenAI } from "openai";
+import type { OpenAI } from "@openai/openai";
 
 export interface ChatRequest {
   messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
@@ -83,10 +83,13 @@ export const handler: Handlers<ChatRequest | null> = {
             headers: { "Content-Type": "application/json" },
           });
         } catch (error) {
-          return new Response(JSON.stringify({ text: "", error: `Error processing request: ${error.message}` }), {
-            status: 500,
-            headers: { "Content-Type": "application/json" },
-          });
+          return new Response(
+            JSON.stringify({ text: "", error: `Error processing request: ${(error as Error).message}` }),
+            {
+              status: 500,
+              headers: { "Content-Type": "application/json" },
+            },
+          );
         }
       }
 
@@ -104,7 +107,7 @@ export const handler: Handlers<ChatRequest | null> = {
         headers: { "Content-Type": "application/json" },
       });
     } catch (error) {
-      return new Response(JSON.stringify({ text: "", error: `Server error: ${error.message}` }), {
+      return new Response(JSON.stringify({ text: "", error: `Server error: ${(error as Error).message}` }), {
         status: 500,
         headers: { "Content-Type": "application/json" },
       });

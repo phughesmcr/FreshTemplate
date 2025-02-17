@@ -1,6 +1,7 @@
 import type { Handlers } from "$fresh/server.ts";
 import { openai } from "lib/openai.ts";
-import { toFile } from "openai";
+import { toFile } from "@openai/openai";
+import type { ServerState } from "lib/middlewares/state.ts";
 
 export type TranscriptionResponse = {
   text: string;
