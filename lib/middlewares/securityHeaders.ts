@@ -7,24 +7,24 @@ import type { ServerState } from "./state.ts";
 const SECURITY_HEADERS: Record<string, string> = {
   // "Access-Control-Allow-Origin": "https://trusted-site.com",
   // deno-fmt-ignore
-  "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; object-src 'none'; upgrade-insecure-requests; frame-ancestors 'none'; connect-src 'self' https://api.openai.com; media-src 'self' data: blob:; manifest-src 'self';",
+  "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests; connect-src 'self' https://api.openai.com; media-src 'self' data: blob:; manifest-src 'self'; worker-src 'self' blob:;",
   "Cross-Origin-Embedder-Policy": "require-corp",
   "Cross-Origin-Opener-Policy": "same-origin",
-  // "Cross-Origin-Resource-Policy": "same-origin",
+  "Cross-Origin-Resource-Policy": "same-origin",
   "Expect-CT": "max-age=86400, enforce",
   // "NEL": "{\"report_to\":\"default\",\"max_age\":31536000,\"include_subdomains\":true}",
   "Origin-Agent-Cluster": "?1",
   // deno-fmt-ignore
-  "Permissions-Policy": "accelerometer=(), camera=(), encrypted-media=(), gyroscope=(), interest-cohort=(), microphone=(), magnetometer=(), midi=(), payment=(), picture-in-picture=(), publickey-credentials-get=(), sync-xhr=(), usb=(), xr-spatial-tracking=(), geolocation=()",
-  "Referrer-Policy": "no-referrer",
+  "Permissions-Policy": "accelerometer=(), ambient-light-sensor=(), autoplay=(), battery=(), camera=(), cross-origin-isolated=(), display-capture=(), document-domain=(), encrypted-media=(), execution-while-not-rendered=(), execution-while-out-of-viewport=(), fullscreen=(), geolocation=(), gyroscope=(), keyboard-map=(), magnetometer=(), microphone=(), midi=(), navigation-override=(), payment=(), picture-in-picture=(), publickey-credentials-get=(), screen-wake-lock=(), sync-xhr=(), usb=(), web-share=(), xr-spatial-tracking=(), clipboard-read=(), clipboard-write=(), gamepad=(), speaker-selection=(), conversion-measurement=(), focus-without-user-activation=(), hid=(), idle-detection=(), interest-cohort=(), serial=(), trust-token-redemption=(), window-placement=(), vertical-scroll=()",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
   // "Report-To": "{\"group\":\"default\",\"max_age\":31536000,\"endpoints\":[{\"url\":\"https://your-report-collector.example.com/reports\"}]}"
   "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
   "X-Content-Type-Options": "nosniff",
   "X-DNS-Prefetch-Control": "off",
   "X-Download-Options": "noopen",
-  "X-Frame-Options": "SAMEORIGIN",
+  "X-Frame-Options": "DENY",
   "X-Permitted-Cross-Domain-Policies": "none",
-  "X-XSS-Protection": "1; mode=block",
+  "X-XSS-Protection": "0", // Modern browsers don't need this
 };
 
 const MIME_TYPES: Record<string, string> = {
@@ -120,18 +120,28 @@ const setETag = (headers: Headers, path: string): void => {
 
 const setCorsHeaders = (headers: Headers, method: string, origin: string | null): void => {
   if (!origin) return;
-  if (method === "OPTIONS") {
-    headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  } else {
-    headers.set(
-      "Access-Control-Allow-Headers",
-      "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With",
-    );
-  }
+
+  const allowedOrigins = Deno.env.get("ALLOWED_ORIGINS")?.split(",") || [];
+  if (!allowedOrigins.includes(origin)) return;
+
   headers.set("Access-Control-Allow-Origin", origin);
   headers.set("Access-Control-Allow-Credentials", "true");
-  headers.set("Access-Control-Allow-Methods", "POST, GET");
-  headers.set("Access-Control-Max-Age", "86400");
+
+  if (method === "OPTIONS") {
+    headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    headers.set(
+      "Access-Control-Allow-Headers",
+      [
+        "Content-Type",
+        "Authorization",
+        "X-CSRF-Token",
+        "X-Requested-With",
+      ].join(", "),
+    );
+    headers.set("Access-Control-Max-Age", "86400"); // 24 hours
+  }
+
+  headers.append("Vary", "Origin");
 };
 
 const deleteXPowerBy = (headers: Headers): void => {
