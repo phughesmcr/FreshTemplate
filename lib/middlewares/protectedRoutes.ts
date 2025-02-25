@@ -1,10 +1,11 @@
 import type { FreshContext } from "$fresh/server.ts";
 import { deleteCookie, getCookies } from "@std/http";
-import { normalize, join, isAbsolute } from "@std/path";
-import type { ServerState } from "./state.ts";
+import { isAbsolute, join, normalize } from "@std/path";
+import type { ServerState } from "lib/middlewares/state.ts";
+import { ProtectedRoutes } from "lib/constants.ts";
 
 // Define protected routes with more granular permissions
-export const PROTECTED_ROUTES = ["/api", "/auth", "/chat", "/user"] as const;
+export const PROTECTED_ROUTES = ProtectedRoutes.PATHS;
 export type ProtectedRoute = typeof PROTECTED_ROUTES[number];
 
 // Define permission levels
@@ -27,93 +28,88 @@ export const ROUTE_PERMISSIONS: RoutePermissions = {
 };
 
 // Define redirect paths for unauthorized access
-export const REDIRECT_PATHS: Record<ProtectedRoute, string> = {
-  "/api": "/api-access-denied",
-  "/auth": "/login",
-  "/chat": "/login",
-  "/user": "/login",
-};
+export const REDIRECT_PATHS: Record<ProtectedRoute, string> = ProtectedRoutes.REDIRECT_PATHS;
 
 /**
  * Normalizes a URL path using the standard path library
  * - Handles path separators consistently
  * - Resolves '..' and '.' segments
  * - Handles duplicate slashes
- * 
+ *
  * @param path The path to normalize
  * @returns Normalized path string
  */
 export function normalizePath(path: string): string {
   // Ensure path starts with slash
   if (!isAbsolute(path)) {
-    path = '/' + path;
+    path = "/" + path;
   }
-  
+
   // Use the standard library to normalize the path
   // This handles cases like double slashes, '..' segments, etc.
   let normalized = normalize(path);
-  
+
   // On Windows normalize() might use backslashes, but for web paths we want forward slashes
-  normalized = normalized.replace(/\\/g, '/');
-  
+  normalized = normalized.replace(/\\/g, "/");
+
   // Decode URL components safely
   try {
     normalized = decodeURIComponent(normalized);
   } catch {
     // If decoding fails, continue with the encoded path
   }
-  
+
   return normalized;
 }
 
 /**
  * Checks if a path matches a protected route using proper path segment boundary checks
- * 
+ *
  * @param path The path to check
  * @returns A type predicate indicating if the path is a protected route
  */
 export const isProtectedRoute = (path: string): path is ProtectedRoute => {
   const normalizedPath = normalizePath(path);
-  
-  return PROTECTED_ROUTES.some(route => {
+
+  return PROTECTED_ROUTES.some((route) => {
     // Check for exact match
     if (normalizedPath === route) {
       return true;
     }
-    
+
     // Check for path prefix with proper segment boundary
     // We use join to ensure proper handling of the trailing slash
-    const routeWithTrailingSlash = join(route, '/');
+    const routeWithTrailingSlash = join(route, "/");
     if (normalizedPath.startsWith(routeWithTrailingSlash)) {
       return true;
     }
-    
+
     return false;
   });
 };
 
 /**
  * Gets the base route from a path with proper path segment boundary checking
- * 
+ *
  * @param path The full path
  * @returns The matching protected route or null
  */
 export const getBaseRoute = (path: string): ProtectedRoute | null => {
   const normalizedPath = normalizePath(path);
-  
+
   for (const route of PROTECTED_ROUTES) {
     // Exact match
     if (normalizedPath === route) {
       return route;
     }
-    
+
     // Path prefix with proper segment boundary
-    const routeWithTrailingSlash = join(route, '/');
+    const routeWithTrailingSlash = join(route, "/");
     if (normalizedPath.startsWith(routeWithTrailingSlash)) {
       return route;
     }
   }
-  
+
   return null;
 };
 
@@ -134,20 +130,20 @@ async function verifyToken(token: string): Promise<JWTPayload | null> {
   try {
     // This is a placeholder - implement with your JWT library
     // For production, use a proper JWT verification library
-    
+
     // Example structure for verification:
     // 1. Split the token into parts
-    const parts = token.split('.');
+    const parts = token.split(".");
     if (parts.length !== 3) return null;
-    
+
     // 2. Decode the payload
     const payload = JSON.parse(atob(parts[1]));
-    
+
     // 3. Check expiration
     if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
       return null;
     }
-    
+
     return payload as JWTPayload;
   } catch (error) {
     console.error("Token verification failed:", error);
@@ -163,7 +159,7 @@ async function verifyToken(token: string): Promise<JWTPayload | null> {
  */
 function hasPermission(route: ProtectedRoute, userPermissions: string[]): boolean {
   const requiredPermissions = ROUTE_PERMISSIONS[route];
-  return requiredPermissions.some(permission => userPermissions.includes(permission));
+  return requiredPermissions.some((permission) => userPermissions.includes(permission));
 }
 
 /**
@@ -204,7 +200,7 @@ export default async function protectedRouteHandler(
 
       // 4. Verify the token and extract user information
       const payload = await verifyToken(accessToken);
-      
+
       if (payload) {
         // 5. Check if token is valid and not expired
         ctx.state.user = {
@@ -212,7 +208,7 @@ export default async function protectedRouteHandler(
           username: payload.username,
           permissions: payload.permissions,
         };
-        
+
         // 6. Check if user has required permissions for this route
         if (!hasPermission(baseRoute, payload.permissions)) {
           ctx.state.error = "Insufficient permissions";
@@ -223,7 +219,7 @@ export default async function protectedRouteHandler(
             statusText: "Forbidden",
           });
         }
-        
+
         // User is authenticated and authorized, continue
         return await ctx.next();
       }
@@ -259,10 +255,10 @@ export default async function protectedRouteHandler(
       }
 
       ctx.state.error = `Authentication error: ${error.message}`;
-      
+
       // Log the error for debugging
       console.error("Authentication error:", error);
-      
+
       headers.set("location", "/");
 
       return new Response(null, {

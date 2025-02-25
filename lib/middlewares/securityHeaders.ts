@@ -2,7 +2,8 @@ import type { FreshContext } from "$fresh/server.ts";
 import { encodeHex } from "@std/encoding/hex";
 import { md5 } from "@takker/md5";
 import { isProtectedRoute } from "lib/middlewares/protectedRoutes.ts";
-import type { ServerState } from "./state.ts";
+import type { ServerState } from "lib/middlewares/state.ts";
+import { MimeTypes, Security } from "lib/constants.ts";
 
 /**
  * Security header names type for type safety
@@ -28,29 +29,11 @@ export type SecurityHeaderName =
  * Security headers to be applied to all responses
  */
 const SECURITY_HEADERS: Record<SecurityHeaderName, string> = {
-  // deno-fmt-ignore
-  "Content-Security-Policy": [
-    "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-    "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob:",
-    "font-src 'self' data:",
-    "object-src 'none'",
-    "base-uri 'self'",
-    "form-action 'self'",
-    "frame-ancestors 'none'",
-    "upgrade-insecure-requests",
-    "connect-src 'self' https://api.openai.com",
-    "media-src 'self' data: blob:",
-    "manifest-src 'self'",
-    "worker-src 'self' blob:"
-  ].join("; "),
-  "Cross-Origin-Embedder-Policy": "require-corp",
-  "Cross-Origin-Opener-Policy": "same-origin",
-  "Cross-Origin-Resource-Policy": "same-origin",
-  "Expect-CT": "max-age=86400, enforce",
-  "Origin-Agent-Cluster": "?1",
-  // deno-fmt-ignore
+  // Using CSP directives from constants file
+  "Content-Security-Policy": Security.CSP_DIRECTIVES.join("; "),
+  // Using common headers from constants file
+  ...Security.COMMON_HEADERS,
+  // Permissions policy is long and complex - keeping it inline for now
   "Permissions-Policy": [
     // Sensors and device access
     "accelerometer=()",
@@ -60,128 +43,35 @@ const SECURITY_HEADERS: Record<SecurityHeaderName, string> = {
     "gyroscope=()",
     "magnetometer=()",
     "microphone=()",
-    
-    // Feature policies
-    "autoplay=()",
-    "document-domain=()",
-    "encrypted-media=()",
-    "fullscreen=()",
-    "geolocation=()",
-    "picture-in-picture=()",
-    
-    // Advanced features
+    "midi=()",
     "payment=()",
-    "publickey-credentials-get=()",
     "usb=()",
-    "xr-spatial-tracking=()",
-    
-    // Performance and monitoring
-    "execution-while-not-rendered=()",
-    "execution-while-out-of-viewport=()",
-    "sync-xhr=()",
-    
-    // Privacy-sensitive features
-    "screen-wake-lock=()",
-    "web-share=()",
-    "clipboard-read=()",
-    "clipboard-write=()",
+    // Geolocation and positioning
+    "geolocation=()",
+    // Device info
+    "display-capture=()",
+    "document-domain=()",
+    // Various features
+    "encrypted-media=()",
+    "fullscreen=(self)",
     "gamepad=()",
-    "speaker-selection=()",
-    "interest-cohort=()",
-    
-    // Experimental features
-    "conversion-measurement=()",
-    "focus-without-user-activation=()",
     "hid=()",
     "idle-detection=()",
+    "interest-cohort=()",
+    "picture-in-picture=(self)",
+    "publickey-credentials-get=()",
+    "screen-wake-lock=()",
     "serial=()",
-    "trust-token-redemption=()",
-    "window-placement=()",
-    "vertical-scroll=()",
-    "keyboard-map=()",
-    "midi=()",
-    "navigation-override=()",
-    "cross-origin-isolated=()",
-    "display-capture=()"
+    "sync-xhr=()",
+    "web-share=(self)",
+    "xr-spatial-tracking=()",
   ].join(", "),
-  "Referrer-Policy": "strict-origin-when-cross-origin",
-  "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
-  "X-Content-Type-Options": "nosniff",
-  "X-DNS-Prefetch-Control": "off",
-  "X-Download-Options": "noopen",
-  "X-Frame-Options": "DENY",
-  "X-Permitted-Cross-Domain-Policies": "none",
-  "X-XSS-Protection": "0", // Modern browsers don't need this
 };
 
 /**
  * Cache for ETag values to avoid recalculating
  */
 const etagCache = new Map<string, string>();
-
-/**
- * Maps file extensions to MIME types
- */
-const MIME_TYPES = new Map<string, string>([
-  // Text
-  [".html", "text/html; charset=utf-8"],
-  [".css", "text/css; charset=utf-8"],
-  [".js", "application/javascript; charset=utf-8"],
-  [".json", "application/json"],
-  [".xml", "application/xml"],
-  [".txt", "text/plain"],
-  [".md", "text/markdown"],
-  [".webmanifest", "application/manifest+json"],
-
-  // Images
-  [".png", "image/png"],
-  [".jpg", "image/jpeg"],
-  [".jpeg", "image/jpeg"],
-  [".gif", "image/gif"],
-  [".svg", "image/svg+xml"],
-  [".webp", "image/webp"],
-  [".ico", "image/x-icon"],
-
-  // Audio
-  [".mp3", "audio/mpeg"],
-  [".wav", "audio/wav"],
-  [".ogg", "audio/ogg"],
-
-  // Video
-  [".mp4", "video/mp4"],
-  [".webm", "video/webm"],
-
-  // Fonts
-  [".woff", "font/woff"],
-  [".woff2", "font/woff2"],
-  [".ttf", "font/ttf"],
-  [".otf", "font/otf"],
-  [".eot", "application/vnd.ms-fontobject"],
-
-  // Documents
-  [".pdf", "application/pdf"],
-  [".doc", "application/msword"],
-  [".docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
-  [".xls", "application/vnd.ms-excel"],
-  [".xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"],
-  [".ppt", "application/vnd.ms-powerpoint"],
-  [".pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"],
-
-  // Archives
-  [".zip", "application/zip"],
-  [".rar", "application/x-rar-compressed"],
-  [".7z", "application/x-7z-compressed"],
-  [".tar", "application/x-tar"],
-  [".gz", "application/gzip"],
-
-  // Other
-  [".wasm", "application/wasm"],
-]);
-
-/**
- * File extensions that should be cached
- */
-const CACHEABLE_EXTENSIONS = new Set([".css", ".jpg", ".js", ".png", ".svg", ".woff", ".woff2"]);
 
 /**
  * Extracts file extension from a path
@@ -205,7 +95,7 @@ const setSecurityHeaders = (headers: Headers): void => {
  */
 const setContentType = (headers: Headers, path: string): void => {
   const extension = getExtension(path);
-  const mimeType = MIME_TYPES.get(extension);
+  const mimeType = MimeTypes.MAP.get(extension);
   if (mimeType) {
     headers.set("Content-Type", mimeType);
   }
@@ -221,7 +111,7 @@ const setCacheControl = (headers: Headers, path: string): void => {
     headers.set("Expires", "0");
   } else {
     const extension = getExtension(path);
-    if (CACHEABLE_EXTENSIONS.has(extension)) {
+    if (MimeTypes.CACHEABLE_EXTENSIONS.has(extension)) {
       headers.set("Cache-Control", "public, max-age=31536000, immutable");
     }
   }

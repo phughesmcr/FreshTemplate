@@ -1,6 +1,7 @@
 import type { Handlers } from "$fresh/server.ts";
-import { openai } from "lib/openai.ts";
+import { openAIService } from "lib/openai.ts";
 import { encodeBase64 } from "@std/encoding";
+import { VoiceSynthesis } from "lib/constants.ts";
 
 /**
  * @module voicesynth
@@ -8,29 +9,16 @@ import { encodeBase64 } from "@std/encoding";
  */
 
 /** The type of voices available for synthesis. */
-export type VoiceType =
-  | "alloy"
-  | "echo"
-  | "fable"
-  | "onyx"
-  | "nova"
-  | "shimmer";
+export type VoiceType = typeof VoiceSynthesis.VOICE_TYPES[number];
 
 /** The list of voices available for synthesis. */
-export const voiceTypes: VoiceType[] = [
-  "alloy",
-  "echo",
-  "fable",
-  "onyx",
-  "nova",
-  "shimmer",
-] as const;
+export const voiceTypes = VoiceSynthesis.VOICE_TYPES;
 
 /** The default voice to use for synthesis. */
-export const DEFAULT_VOICE: VoiceType = "alloy";
+export const DEFAULT_VOICE = VoiceSynthesis.DEFAULT_VOICE;
 
 /** The default TTS model to use for synthesis. */
-export const DEFAULT_VOICE_MODEL: string = "tts-1";
+export const DEFAULT_VOICE_MODEL = VoiceSynthesis.DEFAULT_MODEL;
 
 /** The request object for the voice synthesis API. */
 export interface VoiceSynthRequest {
@@ -69,7 +57,8 @@ export const responseToBase64 = async (response: Response): Promise<string> => {
 /** The route handler for the voice synthesis API. */
 export const handler: Handlers<VoiceSynthRequest | null, unknown> = {
   async POST(req, _ctx) {
-    if (!openai || !openai.audio || !openai.audio.speech) {
+    const client = openAIService.getClient();
+    if (!client || !client.audio || !client.audio.speech) {
       return new Response(JSON.stringify({ error: "Voice synthesis service unavailable" }), {
         status: 503,
         headers: { "Content-Type": "application/json" },
@@ -88,10 +77,10 @@ export const handler: Handlers<VoiceSynthRequest | null, unknown> = {
         );
       }
 
-      props.voice = props.voice || DEFAULT_VOICE;
-      const voice: VoiceType = isValidVoice(props.voice) ? props.voice : DEFAULT_VOICE;
+      props.voice = props.voice || DEFAULT_VOICE as VoiceType;
+      const voice = isValidVoice(props.voice) ? props.voice : DEFAULT_VOICE as VoiceType;
 
-      const audioResponse = await openai.audio.speech.create({
+      const audioResponse = await client.audio.speech.create({
         model: DEFAULT_VOICE_MODEL,
         voice: voice.toLowerCase().trim() as VoiceType,
         input: props.message,

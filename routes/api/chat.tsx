@@ -1,9 +1,10 @@
 import type { Handlers } from "$fresh/server.ts";
-import { openai } from "lib/openai.ts";
-import type { OpenAI } from "@openai/openai";
+import { openAIService } from "lib/openai.ts";
+import type { OpenAI as OpenAIType } from "@openai/openai";
+import { HttpStatus, OpenAI } from "lib/constants.ts";
 
 export interface ChatRequest {
-  messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
+  messages: OpenAIType.Chat.Completions.ChatCompletionMessageParam[];
 }
 
 export type ChatResponse = {
@@ -11,106 +12,117 @@ export type ChatResponse = {
   error: string | null;
 };
 
-const MODEL = "gpt-4o-mini";
-const MAX_TOKENS = 1028;
-const TEMPERATURE = 0.1;
+/**
+ * Creates a response with standardized format and headers
+ */
+function createJsonResponse(
+  data: ChatResponse,
+  status: number,
+): Response {
+  return new Response(
+    JSON.stringify(data),
+    {
+      status,
+      headers: { "Content-Type": "application/json" },
+    },
+  );
+}
+
+/**
+ * Creates an error response with consistent format
+ */
+function createErrorResponse(
+  error: string,
+  status: number = HttpStatus.BAD_REQUEST,
+): Response {
+  return createJsonResponse({ text: "", error }, status);
+}
 
 export const handler: Handlers<ChatRequest | null> = {
   async POST(req, _ctx): Promise<Response> {
     try {
-      if (!openai) {
-        return new Response(JSON.stringify({ text: "", error: "Chat completion service unavailable" }), {
-          status: 503,
-          headers: { "Content-Type": "application/json" },
-        });
+      // Check if OpenAI service is available
+      if (!openAIService || !openAIService.isConfigured()) {
+        return createErrorResponse("Chat completion service unavailable", HttpStatus.SERVICE_UNAVAILABLE);
       }
 
-      const { messages } = await req.json();
-      console.log("Received messages:", messages);
+      // Parse request
+      let messages: OpenAIType.Chat.Completions.ChatCompletionMessageParam[];
+      try {
+        const body = await req.json();
+        messages = body.messages;
+      } catch (error) {
+        return createErrorResponse(
+          `Invalid request format: ${error instanceof Error ? error.message : String(error)}`,
+          HttpStatus.BAD_REQUEST,
+        );
+      }
 
+      // Validate messages
       if (!messages || !Array.isArray(messages)) {
-        return new Response(JSON.stringify({ text: "", error: "No messages" }), {
-          status: 400,
-          headers: { "Content-Type": "application/json" },
-        });
+        return createErrorResponse("Messages must be provided as an array", HttpStatus.BAD_REQUEST);
       }
-      if (!messages.length) {
-        return new Response(JSON.stringify({ text: "", error: "No message length" }), {
-          status: 400,
-          headers: { "Content-Type": "application/json" },
-        });
+
+      if (messages.length === 0) {
+        return createErrorResponse("At least one message must be provided", HttpStatus.BAD_REQUEST);
       }
+
       if (messages[0].role !== "system") {
-        return new Response(JSON.stringify({ text: "", error: "First message must be system" }), {
-          status: 400,
-          headers: { "Content-Type": "application/json" },
-        });
+        return createErrorResponse("First message must have 'system' role", HttpStatus.BAD_REQUEST);
       }
+
       if (messages[messages.length - 1].role === "system") {
-        return new Response(JSON.stringify({ text: "", error: "Last message cannot be system" }), {
-          status: 400,
-          headers: { "Content-Type": "application/json" },
-        });
+        return createErrorResponse("Last message cannot have 'system' role", HttpStatus.BAD_REQUEST);
       }
 
-      // messages[0].content = systemPrompt;
+      // Handle based on last message role
+      const lastMessage = messages[messages.length - 1];
 
-      // respond to user
-      if (messages[messages.length - 1].role === "user") {
+      // Handle user message - generate AI response
+      if (lastMessage.role === "user") {
         try {
-          const response = await openai?.chat.completions.create({
-            messages: messages,
-            max_tokens: MAX_TOKENS,
-            temperature: TEMPERATURE,
-            model: MODEL,
+          const client = openAIService.getClient();
+          const response = await client.chat.completions.create({
+            messages,
+            max_tokens: OpenAI.MAX_TOKENS,
+            temperature: OpenAI.TEMPERATURE,
+            model: OpenAI.MODEL,
           });
+
           if (!response) {
-            return new Response(JSON.stringify({ text: "", error: "No response from OpenAI" }), {
-              status: 503,
-              headers: { "Content-Type": "application/json" },
-            });
+            return createErrorResponse("No response from OpenAI", HttpStatus.SERVICE_UNAVAILABLE);
           }
-          // partial response
+
           if (response.choices[0]?.finish_reason !== "stop") {
-            // TODO: handle partial response properly
-            console.error("Chat did not complete successfully:", response.choices[0]?.finish_reason);
-            throw new Error("Chat did not complete successfully");
+            console.error("Incomplete response:", response.choices[0]?.finish_reason);
+            return createErrorResponse("Chat completion was interrupted", HttpStatus.INTERNAL_SERVER_ERROR);
           }
-          // success
+
           const responseText = response.choices[0]?.message?.content || "";
-          return new Response(JSON.stringify({ text: responseText, error: null }), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          });
+          return createJsonResponse({ text: responseText, error: null }, HttpStatus.OK);
         } catch (error) {
-          return new Response(
-            JSON.stringify({ text: "", error: `Error processing request: ${(error as Error).message}` }),
-            {
-              status: 500,
-              headers: { "Content-Type": "application/json" },
-            },
+          console.error("OpenAI API error:", error);
+          return createErrorResponse(
+            `Error processing OpenAI request: ${error instanceof Error ? error.message : String(error)}`,
+            HttpStatus.INTERNAL_SERVER_ERROR,
           );
         }
       }
 
-      // respond to assistant
-      if (messages[messages.length - 1].role === "assistant") {
-        return new Response(JSON.stringify({ text: "", error: "Assistant message handling not implemented" }), {
-          status: 501,
-          headers: { "Content-Type": "application/json" },
-        });
+      // Handle assistant message (currently not implemented)
+      if (lastMessage.role === "assistant") {
+        // TODO: Implement assistant message handling (like validating AI responses)
+        return createErrorResponse("Assistant message handling not implemented", HttpStatus.NOT_IMPLEMENTED);
       }
 
-      // return null if no response
-      return new Response(JSON.stringify({ text: "", error: "Invalid response" }), {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      });
+      // If we get here, the message role is not supported
+      return createErrorResponse(`Unsupported message role: ${lastMessage.role}`, HttpStatus.BAD_REQUEST);
     } catch (error) {
-      return new Response(JSON.stringify({ text: "", error: `Server error: ${(error as Error).message}` }), {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      });
+      console.error("Unexpected server error:", error);
+      return createErrorResponse(
+        `Server error: ${error instanceof Error ? error.message : String(error)}`,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
   },
 };

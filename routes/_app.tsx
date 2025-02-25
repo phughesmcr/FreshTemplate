@@ -1,25 +1,13 @@
 import { asset } from "$fresh/runtime.ts";
 import type { PageProps } from "$fresh/server.ts";
-
-const JSONLD = {
-  "@context": "http://www.schema.org",
-  "@type": "WebSite",
-  "name": "",
-  "url": "https://www.",
-  "image": {
-    "@type": "ImageObject",
-    "url": "https://www./android-chrome-512x512.png",
-    "width": 512,
-    "height": 512,
-  },
-};
+import { WebsiteMetadata } from "lib/constants.ts";
 
 export default function App({ Component }: PageProps) {
   return (
     <html lang="en" dir="ltr">
       <head prefix="og: http://ogp.me/ns# fb: http://ogp.me/ns/fb# rdfa: http://www.w3.org/ns/rdfa# rdfs: http://www.w3.org/2000/01/rdf-schema# dcterms: http://purl.org/dc/terms/ foaf: http://xmlns.com/foaf/0.1/">
         <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, , viewport-fit=cover" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
         <title></title>
         <meta name="description" content="" />
 
@@ -58,7 +46,7 @@ export default function App({ Component }: PageProps) {
         <meta name="twitter:description" content="" />
         <meta name="twitter:image:src" content="https://" />
 
-        <meta name="theme-color" content="#1881F2" key="head-theme-color" />
+        <meta name="theme-color" content={WebsiteMetadata.THEME_COLOR} key="head-theme-color" />
         <meta name="application-name" content="" />
         <meta name="HandheldFriendly" content="True" />
         <meta name="MobileOptimized" content="320" />
@@ -87,7 +75,7 @@ export default function App({ Component }: PageProps) {
         <link rel="stylesheet" href={asset("/styles.css")} />
 
         <script type="application/ld+json">
-          {JSON.stringify(JSONLD)}
+          {JSON.stringify(WebsiteMetadata.JSONLD)}
         </script>
         {
           /* {

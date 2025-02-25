@@ -1,7 +1,8 @@
 import type { Handlers } from "$fresh/server.ts";
-import { openai } from "lib/openai.ts";
+import { openAIService } from "lib/openai.ts";
 import { toFile } from "@openai/openai";
 import type { ServerState } from "lib/middlewares/state.ts";
+import { AudioTranscription } from "lib/constants.ts";
 
 export type TranscriptionResponse = {
   text: string;
@@ -10,7 +11,8 @@ export type TranscriptionResponse = {
 
 export const handler: Handlers<null, ServerState> = {
   async POST(req): Promise<Response> {
-    if (!openai) {
+    const client = openAIService.getClient();
+    if (!client) {
       return new Response(JSON.stringify({ text: "", error: "Transcription service unavailable" }), {
         status: 503,
         headers: { "Content-Type": "application/json" },
@@ -25,11 +27,11 @@ export const handler: Handlers<null, ServerState> = {
           headers: { "Content-Type": "application/json" },
         });
       }
-      const response = await openai.audio.transcriptions.create({
-        language: "en",
+      const response = await client.audio.transcriptions.create({
+        language: AudioTranscription.DEFAULT_LANGUAGE,
         file: await toFile(file, file.name, { type: file.type }),
-        model: "whisper-1",
-        response_format: "text",
+        model: AudioTranscription.MODEL,
+        response_format: AudioTranscription.RESPONSE_FORMAT,
       });
       return new Response(JSON.stringify({ text: response, error: null }), {
         status: 200,

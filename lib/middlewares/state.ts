@@ -1,6 +1,7 @@
 import type { FreshContext } from "$fresh/server.ts";
 import { cookieSession, type WithSession } from "fresh-session";
-import type { User } from "../types.ts";
+import type { User } from "lib/types.ts";
+import { Session } from "lib/constants.ts";
 
 /**
  * Server state interface that extends the session state with application-specific properties
@@ -12,21 +13,13 @@ export interface ServerState extends WithSession, Record<string, unknown> {
   sessionTermsAccepted: boolean | null;
 }
 
-// Load configuration from environment with fallbacks
-const SESSION_CONFIG = {
-  EXPIRES: parseInt(Deno.env.get("SESSION_EXPIRES") || "2592000000"), // 30 days in ms
-  HTTP_ONLY: Deno.env.get("SESSION_HTTP_ONLY") !== "false",
-  PATH: Deno.env.get("SESSION_PATH") || "/",
-  SAME_SITE: Deno.env.get("SESSION_SAME_SITE") || "Strict",
-  SECURE: Deno.env.get("SESSION_SECURE") !== "false",
-};
-
+// Use session configuration from constants
 const session = cookieSession({
-  expires: SESSION_CONFIG.EXPIRES,
-  httpOnly: SESSION_CONFIG.HTTP_ONLY,
-  path: SESSION_CONFIG.PATH,
-  sameSite: SESSION_CONFIG.SAME_SITE as "Strict" | "Lax" | "None",
-  secure: SESSION_CONFIG.SECURE,
+  expires: Session.CONFIG.EXPIRES,
+  httpOnly: Session.CONFIG.HTTP_ONLY,
+  path: Session.CONFIG.PATH,
+  sameSite: Session.CONFIG.SAME_SITE as "Strict" | "Lax" | "None",
+  secure: Session.CONFIG.SECURE,
 });
 
 /**
@@ -46,7 +39,7 @@ export default async function stateHandler(
       message: ctx.state.message ?? null,
       sessionTermsAccepted: ctx.state.sessionTermsAccepted ?? null,
     };
-    
+
     // Apply session middleware
     return await session(req, ctx);
   } catch (error) {

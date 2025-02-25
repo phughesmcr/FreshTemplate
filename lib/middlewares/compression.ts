@@ -2,6 +2,7 @@ import type { FreshContext } from "$fresh/server.ts";
 import { compress as brotliCompress } from "brotli";
 import { gzip } from "compress";
 import type { ServerState } from "lib/middlewares/state.ts";
+import { Compression } from "lib/constants.ts";
 
 export interface CompressionOptions {
   /** MIME types that should be compressed */
@@ -19,19 +20,12 @@ export interface CompressionOptions {
 }
 
 const DEFAULT_OPTIONS: CompressionOptions = {
-  compressibleTypes: [
-    "text/",
-    "application/json",
-    "application/xml",
-    "application/javascript",
-    "application/xhtml+xml",
-    "image/svg+xml",
-  ],
-  minSize: 1024, // 1KB
-  brotliQuality: 4,
-  gzipLevel: 6,
-  disableBrotli: false,
-  disableGzip: false,
+  compressibleTypes: Compression.COMPRESSIBLE_TYPES,
+  minSize: Compression.MIN_SIZE,
+  brotliQuality: Compression.BROTLI_QUALITY,
+  gzipLevel: Compression.GZIP_LEVEL,
+  disableBrotli: Compression.DISABLE_BROTLI,
+  disableGzip: Compression.DISABLE_GZIP,
 };
 
 /**

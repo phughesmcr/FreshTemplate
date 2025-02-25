@@ -1,22 +1,6 @@
 import type { FreshContext } from "$fresh/server.ts";
-import type { ServerState } from "./state.ts";
-
-interface RateLimitConfig {
-  readonly WINDOW_SIZE: number;
-  readonly MAX_REQUESTS: number;
-  readonly MAX_BLOCKED_TIME: number;
-  readonly BLOCK_THRESHOLD: number;
-  readonly CLEANUP_INTERVAL: number;
-}
-
-// Load configuration from environment with validation
-const config: RateLimitConfig = {
-  WINDOW_SIZE: Math.max(1, parseInt(Deno.env.get("RATE_LIMIT_WINDOW_SIZE") || "60000")),
-  MAX_REQUESTS: Math.max(1, parseInt(Deno.env.get("RATE_LIMIT_MAX_REQUESTS") || "250")),
-  MAX_BLOCKED_TIME: Math.max(1, parseInt(Deno.env.get("RATE_LIMIT_MAX_BLOCKED_TIME") || "1800000")),
-  BLOCK_THRESHOLD: Math.max(1, parseInt(Deno.env.get("RATE_LIMIT_BLOCK_THRESHOLD") || "5")),
-  CLEANUP_INTERVAL: Math.max(1, parseInt(Deno.env.get("RATE_LIMIT_CLEANUP_INTERVAL") || "300000")),
-} as const;
+import type { ServerState } from "lib/middlewares/state.ts";
+import { HttpStatus, RateLimit } from "lib/constants.ts";
 
 interface RateLimitEntry {
   readonly bucket: number;
@@ -29,8 +13,8 @@ class RateLimiter {
   private readonly store = new Map<string, RateLimitEntry>();
   private readonly cleanupInterval: number;
 
-  constructor(config: RateLimitConfig) {
-    this.cleanupInterval = config.CLEANUP_INTERVAL;
+  constructor() {
+    this.cleanupInterval = RateLimit.CLEANUP_INTERVAL;
     this.startCleanup();
   }
 
@@ -41,7 +25,7 @@ class RateLimiter {
   private cleanup(): void {
     const now = Date.now();
     for (const [ip, entry] of this.store.entries()) {
-      if (now - entry.lastRequest > config.WINDOW_SIZE * 2) {
+      if (now - entry.lastRequest > RateLimit.WINDOW_SIZE * 2) {
         this.store.delete(ip);
       }
     }
@@ -49,10 +33,10 @@ class RateLimiter {
 
   private updateBucket(entry: RateLimitEntry, now: number): RateLimitEntry {
     const timePassed = now - entry.lastRequest;
-    const tokensToAdd = (timePassed / config.WINDOW_SIZE) * config.MAX_REQUESTS;
+    const tokensToAdd = (timePassed / RateLimit.WINDOW_SIZE) * RateLimit.MAX_REQUESTS;
     return {
       ...entry,
-      bucket: Math.min(config.MAX_REQUESTS, entry.bucket + tokensToAdd),
+      bucket: Math.min(RateLimit.MAX_REQUESTS, entry.bucket + tokensToAdd),
       lastRequest: now,
     };
   }
@@ -69,7 +53,7 @@ class RateLimiter {
     let entry = this.store.get(ip);
     if (!entry) {
       entry = {
-        bucket: config.MAX_REQUESTS,
+        bucket: RateLimit.MAX_REQUESTS,
         lastRequest: now,
         violations: 0,
         blockedUntil: 0,
@@ -80,45 +64,45 @@ class RateLimiter {
     entry = this.updateBucket(entry, now);
 
     if (now < entry.blockedUntil) {
-      headers.set("X-RateLimit-Limit", config.MAX_REQUESTS.toString());
+      headers.set("X-RateLimit-Limit", RateLimit.MAX_REQUESTS.toString());
       headers.set("X-RateLimit-Remaining", "0");
       headers.set("X-RateLimit-Reset", entry.blockedUntil.toString());
       return {
         isAllowed: false,
         headers,
-        status: 403,
+        status: HttpStatus.FORBIDDEN,
         error: "IP blocked due to repeated rate limit violations.",
       };
     }
 
     if (entry.bucket < 1) {
       const newViolations = entry.violations + 1;
-      if (newViolations >= config.BLOCK_THRESHOLD) {
-        const blockedUntil = now + config.MAX_BLOCKED_TIME;
+      if (newViolations >= RateLimit.BLOCK_THRESHOLD) {
+        const blockedUntil = now + RateLimit.MAX_BLOCKED_TIME;
         this.store.set(ip, { ...entry, violations: 0, blockedUntil });
 
-        headers.set("X-RateLimit-Limit", config.MAX_REQUESTS.toString());
+        headers.set("X-RateLimit-Limit", RateLimit.MAX_REQUESTS.toString());
         headers.set("X-RateLimit-Remaining", "0");
         headers.set("X-RateLimit-Reset", blockedUntil.toString());
         return {
           isAllowed: false,
           headers,
-          status: 403,
+          status: HttpStatus.FORBIDDEN,
           error: "IP blocked due to repeated rate limit violations.",
         };
       }
 
-      const retryAfter = Math.ceil((1 - entry.bucket) * (config.WINDOW_SIZE / config.MAX_REQUESTS) / 1000);
+      const retryAfter = Math.ceil((1 - entry.bucket) * (RateLimit.WINDOW_SIZE / RateLimit.MAX_REQUESTS) / 1000);
       this.store.set(ip, { ...entry, violations: newViolations });
 
-      headers.set("X-RateLimit-Limit", config.MAX_REQUESTS.toString());
+      headers.set("X-RateLimit-Limit", RateLimit.MAX_REQUESTS.toString());
       headers.set("X-RateLimit-Remaining", "0");
       headers.set("X-RateLimit-Reset", (now + retryAfter * 1000).toString());
       headers.set("Retry-After", retryAfter.toString());
       return {
         isAllowed: false,
         headers,
-        status: 429,
+        status: HttpStatus.TOO_MANY_REQUESTS,
         error: "Rate limit exceeded. Please try again later.",
       };
     }
@@ -129,14 +113,14 @@ class RateLimiter {
       violations: Math.max(0, entry.violations - 1),
     });
 
-    headers.set("X-RateLimit-Limit", config.MAX_REQUESTS.toString());
+    headers.set("X-RateLimit-Limit", RateLimit.MAX_REQUESTS.toString());
     headers.set("X-RateLimit-Remaining", Math.floor(entry.bucket - 1).toString());
-    headers.set("X-RateLimit-Reset", (now + config.WINDOW_SIZE).toString());
+    headers.set("X-RateLimit-Reset", (now + RateLimit.WINDOW_SIZE).toString());
     return { isAllowed: true, headers };
   }
 }
 
-const rateLimiter = new RateLimiter(config);
+const rateLimiter = new RateLimiter();
 
 export default async function rateLimiterMiddleware(
   req: Request,
@@ -146,7 +130,7 @@ export default async function rateLimiterMiddleware(
 
   const ip = req.headers.get("x-forwarded-for") || ctx.remoteAddr.hostname;
   if (!ip) {
-    return new Response("IP address not found", { status: 403 });
+    return new Response("IP address not found", { status: HttpStatus.FORBIDDEN });
   }
 
   const { isAllowed, headers, status, error } = rateLimiter.checkRateLimit(ip);

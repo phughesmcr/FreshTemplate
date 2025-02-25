@@ -1,5 +1,6 @@
 import type { FreshContext } from "$fresh/server.ts";
 import type { ServerState } from "lib/middlewares/state.ts";
+import { HttpsRedirect } from "lib/constants.ts";
 
 export interface HttpsRedirectOptions {
   /** Enable/disable the redirect */
@@ -17,10 +18,10 @@ export interface HttpsRedirectOptions {
  */
 export function createHttpsRedirect(options?: HttpsRedirectOptions) {
   const config = {
-    enabled: true,
-    permanent: true,
-    excludedHosts: [],
-    devEnvironments: ["development", "dev", "local", "test"],
+    enabled: HttpsRedirect.ENABLED,
+    permanent: HttpsRedirect.PERMANENT,
+    excludedHosts: HttpsRedirect.EXCLUDED_HOSTS,
+    devEnvironments: HttpsRedirect.DEV_ENVIRONMENTS,
     ...options,
   };
 
@@ -40,10 +41,7 @@ export function createHttpsRedirect(options?: HttpsRedirectOptions) {
       const url = new URL(req.url);
 
       // Skip redirect for excluded hosts
-      const isExcludedHost = url.hostname === "localhost" ||
-        url.hostname === "127.0.0.1" ||
-        url.hostname === "[::1]" ||
-        config.excludedHosts.includes(url.hostname);
+      const isExcludedHost = config.excludedHosts.includes(url.hostname);
 
       // Check environment
       const currentEnv = Deno.env.get("DENO_ENV") || "";
@@ -53,7 +51,7 @@ export function createHttpsRedirect(options?: HttpsRedirectOptions) {
         url.protocol = "https:";
 
         return new Response(null, {
-          status: config.permanent ? 308 : 307,
+          status: config.permanent ? HttpsRedirect.STATUS_CODES.PERMANENT : HttpsRedirect.STATUS_CODES.TEMPORARY,
           headers: {
             "Location": url.toString(),
             "Cache-Control": config.permanent ? "max-age=63072000" : "no-cache",
