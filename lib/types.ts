@@ -1,6 +1,7 @@
 export interface User {
   id: string;
   username: string;
+  permissions?: string[]; // Adding permissions array for RBAC
   // Add other user properties as needed
 }
 

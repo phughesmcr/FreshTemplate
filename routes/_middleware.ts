@@ -14,7 +14,7 @@ export const handler: ((req: Request, ctx: FreshContext<ServerState, unknown, un
   stateHandler, // server state established here
   protectedRouteHandler,
   rateLimiter,
-  csrf,
   timeout,
+  csrf,
   compression,
 ] as const;

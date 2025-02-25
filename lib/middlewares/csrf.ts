@@ -2,27 +2,70 @@ import type { FreshContext } from "$fresh/server.ts";
 import { getCookies, setCookie } from "$std/http/cookie.ts";
 import { encodeBase64 } from "@std/encoding";
 import { PROTECTED_ROUTES } from "lib/middlewares/protectedRoutes.ts";
-import type { ServerState } from "./state.ts";
+import type { ServerState } from "lib/middlewares/state.ts";
 
 const SAFE_METHODS = ["GET", "HEAD", "OPTIONS"] as const;
 type SafeMethod = typeof SAFE_METHODS[number];
 
-const CSRF_CONFIG = {
-  TOKEN_NAME: "X-CSRF-Token",
-  COOKIE_NAME: "csrf_token",
-  DIGEST: "SHA-256",
-  SAFE_METHODS,
-  MAX_AGE: 3600, // 1 hour in seconds
-  TOKEN_LENGTH: 32,
+export interface CSRFConfig {
+  /** HTTP header name for CSRF token */
+  tokenName: string;
+  /** Cookie name for storing CSRF token */
+  cookieName: string;
+  /** Hashing algorithm to use */
+  digest: string;
+  /** HTTP methods that don't require CSRF protection */
+  safeMethods: readonly string[];
+  /** Token lifetime in seconds */
+  maxAge: number;
+  /** Length of random token buffer in bytes */
+  tokenLength: number;
+  /** Only refresh token when it reaches this percentage of its lifetime (0.0-1.0) */
+  refreshThreshold: number;
+  /** Routes that are exempt from CSRF protection even if they're in protected routes */
+  exemptRoutes: readonly string[];
+}
+
+const DEFAULT_CONFIG: CSRFConfig = {
+  tokenName: "X-CSRF-Token",
+  cookieName: "csrf_token",
+  digest: "SHA-256",
+  safeMethods: SAFE_METHODS,
+  maxAge: 3600, // 1 hour in seconds
+  tokenLength: 32,
+  refreshThreshold: 0.8, // Refresh when token reaches 80% of its lifetime
+  exemptRoutes: [],
 } as const;
 
+/**
+ * CSRF Token Manager handles token generation, validation and refresh
+ */
 class CSRFTokenManager {
-  private static async generateToken(): Promise<string> {
+  private config: CSRFConfig;
+
+  constructor(config: CSRFConfig) {
+    this.config = config;
+  }
+
+  /**
+   * Generates a new CSRF token with timestamp and a masked version for client-side use
+   */
+  public async generateToken(): Promise<{ token: string; maskedToken: string }> {
     const timestamp = Date.now().toString();
     try {
-      const buffer = crypto.getRandomValues(new Uint8Array(CSRF_CONFIG.TOKEN_LENGTH));
-      const hashBuffer = await crypto.subtle.digest(CSRF_CONFIG.DIGEST, buffer);
-      return `${timestamp}.${encodeBase64(new Uint8Array(hashBuffer))}`;
+      // Generate random bytes and hash them
+      const buffer = crypto.getRandomValues(new Uint8Array(this.config.tokenLength));
+      const hashBuffer = await crypto.subtle.digest(this.config.digest, buffer);
+      const token = `${timestamp}.${encodeBase64(new Uint8Array(hashBuffer))}`;
+      
+      // Create a masked version for client-side use (double-submit pattern)
+      const maskedBuffer = await crypto.subtle.digest(
+        this.config.digest, 
+        new TextEncoder().encode(token)
+      );
+      const maskedToken = encodeBase64(new Uint8Array(maskedBuffer));
+      
+      return { token, maskedToken };
     } catch (error) {
       if (error instanceof Error) {
         throw new Error(`Failed to generate CSRF token: ${error.message}`);
@@ -31,12 +74,29 @@ class CSRFTokenManager {
     }
   }
 
-  private static shouldRegenerateToken(token: string): boolean {
-    const tokenAge = Date.now() - parseInt(token.split(".")[0], 10);
-    return tokenAge > (CSRF_CONFIG.MAX_AGE * 1000) / 2;
+  /**
+   * Checks if a token should be regenerated based on its age
+   */
+  public shouldRegenerateToken(token: string): boolean {
+    try {
+      const parts = token.split(".");
+      if (parts.length !== 2) return true;
+      
+      const tokenAge = Date.now() - parseInt(parts[0], 10);
+      const maxTokenAge = this.config.maxAge * 1000;
+      
+      // Only regenerate if token has exceeded the refresh threshold
+      return tokenAge > maxTokenAge * this.config.refreshThreshold;
+    } catch {
+      // If we can't parse the token, generate a new one
+      return true;
+    }
   }
 
-  private static timingSafeEqual(a: string, b: string): boolean {
+  /**
+   * Performs a timing-safe comparison of two strings
+   */
+  public timingSafeEqual(a: string, b: string): boolean {
     if (a.length !== b.length) return false;
     let result = 0;
     const aBytes = new TextEncoder().encode(a);
@@ -47,15 +107,28 @@ class CSRFTokenManager {
     return result === 0;
   }
 
-  private static async getToken(req: Request): Promise<string | null> {
-    const headerToken = req.headers.get(CSRF_CONFIG.TOKEN_NAME);
+  /**
+   * Extracts CSRF token from request (header or form data)
+   */
+  public async getToken(req: Request): Promise<string | null> {
+    const headerToken = req.headers.get(this.config.tokenName);
     if (headerToken) return headerToken;
 
-    if (req.method === "POST" || req.method === "PUT" || req.method === "DELETE") {
+    if (this.isUnsafeMethod(req.method)) {
       const clonedReq = req.clone();
       try {
         const form = await clonedReq.formData();
-        return form.get("csrf_token")?.toString() || null;
+        const formToken = form.get("csrf_token")?.toString();
+        if (formToken) return formToken;
+        
+        // Also check for token in JSON body for API requests
+        try {
+          const jsonBody = await req.clone().json();
+          return jsonBody.csrf_token || null;
+        } catch {
+          // Not JSON or doesn't have token
+          return null;
+        }
       } catch {
         return null;
       }
@@ -63,11 +136,72 @@ class CSRFTokenManager {
     return null;
   }
 
-  public static isSafeMethod(method: string): boolean {
-    return SAFE_METHODS.includes(method.toUpperCase() as SafeMethod) || false;
+  /**
+   * Checks if the HTTP method is considered "safe" (doesn't need CSRF protection)
+   */
+  public isSafeMethod(method: string): boolean {
+    return this.config.safeMethods.includes(method.toUpperCase() as SafeMethod);
   }
 
-  public static async validateRequest(
+  /**
+   * Checks if the HTTP method is considered "unsafe" (needs CSRF protection)
+   */
+  public isUnsafeMethod(method: string): boolean {
+    return !this.isSafeMethod(method);
+  }
+
+  /**
+   * Validates that request origin matches the host
+   */
+  public validateOrigin(req: Request, host: string): boolean {
+    const origin = req.headers.get("Origin");
+    const referer = req.headers.get("Referer");
+    
+    // Some older browsers don't send these headers for same-origin requests
+    if (!origin && !referer) {
+      return true;
+    }
+    
+    if (origin) {
+      try {
+        const originUrl = new URL(origin);
+        return originUrl.host === host;
+      } catch {
+        return false;
+      }
+    }
+    
+    if (referer) {
+      try {
+        const refererUrl = new URL(referer);
+        return refererUrl.host === host;
+      } catch {
+        return false;
+      }
+    }
+    
+    return false;
+  }
+
+  /**
+   * Checks if the route is exempt from CSRF protection
+   */
+  public isExemptRoute(pathname: string): boolean {
+    return this.config.exemptRoutes.some(route => pathname.startsWith(route));
+  }
+
+  /**
+   * Checks if the route requires CSRF protection
+   */
+  public requiresProtection(pathname: string): boolean {
+    return PROTECTED_ROUTES.some(route => pathname.startsWith(route)) && 
+           !this.isExemptRoute(pathname);
+  }
+
+  /**
+   * Validates the CSRF token from the request against the cookie token
+   */
+  public async validateRequest(
     req: Request,
     cookieToken: string | undefined,
   ): Promise<{ isValid: boolean; error?: string }> {
@@ -82,61 +216,139 @@ class CSRFTokenManager {
     };
   }
 
-  public static async refreshToken(
+  /**
+   * Checks if token needs to be refreshed and generates a new one if needed
+   */
+  public async refreshToken(
     cookieToken: string | undefined,
-  ): Promise<{ token: string; shouldRefresh: boolean }> {
+  ): Promise<{ token: string; maskedToken: string; shouldRefresh: boolean }> {
     const shouldRefresh = !cookieToken || this.shouldRegenerateToken(cookieToken);
-    return {
-      token: shouldRefresh ? await this.generateToken() : cookieToken!,
-      shouldRefresh,
-    };
-  }
-}
-
-export default async function csrfMiddleware(
-  req: Request,
-  ctx: FreshContext<ServerState>,
-): Promise<Response> {
-  if (!ctx.destination) return ctx.next();
-  try {
-    const url = new URL(req.url);
-    const cookies = getCookies(req.headers);
-    const cookieToken = cookies[CSRF_CONFIG.COOKIE_NAME];
-
-    // Only validate CSRF token for non-safe methods on protected routes
-    if (
-      !CSRFTokenManager.isSafeMethod(req.method) &&
-      PROTECTED_ROUTES.some((route) => url.pathname.startsWith(route))
-    ) {
-      const { isValid, error } = await CSRFTokenManager.validateRequest(req, cookieToken);
-      if (!isValid) {
-        return new Response(error, { status: 403 });
-      }
-    }
-
-    const { token, shouldRefresh } = await CSRFTokenManager.refreshToken(cookieToken);
-    const response = await ctx.next();
-    const clonedResponse = response.clone();
-    const updatedResponse = new Response(clonedResponse.body, clonedResponse);
-
+    
     if (shouldRefresh) {
-      setCookie(updatedResponse.headers, {
-        name: CSRF_CONFIG.COOKIE_NAME,
-        value: token,
-        maxAge: CSRF_CONFIG.MAX_AGE,
-        httpOnly: true,
-        secure: true,
-        sameSite: "Strict",
-        path: "/",
-      });
+      const { token, maskedToken } = await this.generateToken();
+      return { token, maskedToken, shouldRefresh: true };
     }
-
-    updatedResponse.headers.set(CSRF_CONFIG.TOKEN_NAME, token);
-    return updatedResponse;
-  } catch (error) {
-    if (error instanceof Error) {
-      return new Response(`CSRF middleware error: ${error.message}`, { status: 500 });
+    
+    // If no refresh needed, generate a masked token from the existing one
+    try {
+      const maskedBuffer = await crypto.subtle.digest(
+        this.config.digest,
+        new TextEncoder().encode(cookieToken)
+      );
+      const maskedToken = encodeBase64(new Uint8Array(maskedBuffer));
+      return { token: cookieToken, maskedToken, shouldRefresh: false };
+    } catch {
+      // If generating masked token fails, create a new token pair
+      const { token, maskedToken } = await this.generateToken();
+      return { token, maskedToken, shouldRefresh: true };
     }
-    return new Response("CSRF middleware error", { status: 500 });
   }
 }
+
+/**
+ * Creates a CSRF middleware with customizable configuration
+ */
+export function createCsrfMiddleware(config?: Partial<CSRFConfig>) {
+  const csrfConfig: CSRFConfig = { ...DEFAULT_CONFIG, ...config };
+  const tokenManager = new CSRFTokenManager(csrfConfig);
+  
+  return async function csrfMiddleware(
+    req: Request,
+    ctx: FreshContext<ServerState>,
+  ): Promise<Response> {
+    if (!ctx.destination) return ctx.next();
+    
+    try {
+      const url = new URL(req.url);
+      const cookies = getCookies(req.headers);
+      const cookieToken = cookies[csrfConfig.cookieName];
+      
+      // Validate for unsafe methods on protected routes
+      if (
+        tokenManager.isUnsafeMethod(req.method) && 
+        tokenManager.requiresProtection(url.pathname)
+      ) {
+        // Origin validation (adds protection against CORS-based attacks)
+        if (!tokenManager.validateOrigin(req, url.host)) {
+          return new Response(
+            JSON.stringify({ error: "Invalid request origin" }), 
+            { 
+              status: 403,
+              headers: { "Content-Type": "application/json" }
+            }
+          );
+        }
+        
+        // Token validation
+        const { isValid, error } = await tokenManager.validateRequest(req, cookieToken);
+        if (!isValid) {
+          return new Response(
+            JSON.stringify({ error }), 
+            { 
+              status: 403,
+              headers: { "Content-Type": "application/json" }
+            }
+          );
+        }
+      }
+      
+      // Refresh token if needed and prepare response
+      const { token, maskedToken, shouldRefresh } = await tokenManager.refreshToken(cookieToken);
+      const response = await ctx.next();
+      
+      // Create a clone to modify headers
+      const headers = new Headers(response.headers);
+      
+      // Add no-cache headers for unsafe methods
+      if (tokenManager.isUnsafeMethod(req.method)) {
+        headers.set("Cache-Control", "no-store, max-age=0");
+        headers.set("Pragma", "no-cache");
+        headers.set("Expires", "0");
+      }
+      
+      // Set cookie if token needs refresh
+      if (shouldRefresh) {
+        setCookie(headers, {
+          name: csrfConfig.cookieName,
+          value: token,
+          maxAge: csrfConfig.maxAge,
+          httpOnly: true,
+          secure: true,
+          sameSite: "Strict",
+          path: "/",
+        });
+      }
+      
+      // Add token header for JavaScript to use (masked version)
+      headers.set(csrfConfig.tokenName, maskedToken);
+      
+      // Return the updated response
+      return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers,
+      });
+    } catch (error) {
+      console.error("CSRF middleware error:", error);
+      if (error instanceof Error) {
+        return new Response(
+          JSON.stringify({ error: `CSRF middleware error: ${error.message}` }), 
+          { 
+            status: 500,
+            headers: { "Content-Type": "application/json" }
+          }
+        );
+      }
+      return new Response(
+        JSON.stringify({ error: "CSRF middleware error" }), 
+        { 
+          status: 500,
+          headers: { "Content-Type": "application/json" }
+        }
+      );
+    }
+  };
+}
+
+// Export middleware with default configuration
+export default createCsrfMiddleware();
