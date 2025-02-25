@@ -13,7 +13,7 @@
   "imports": {
     "$fresh/": "https://deno.land/x/fresh@1.7.3/",
     "$std/": "https://deno.land/std@0.224.0/",
-    "@openai/openai": "jsr:@openai/openai@^4.85.1",
+    "@openai/openai": "jsr:@openai/openai@^4.85.4",
     "@preact/signals": "npm:@preact/signals@1.3.2",
     "@preact/signals-core": "npm:@preact/signals-core@1.8.0",
     "@std/encoding": "jsr:@std/encoding@^1.0.7",
@@ -27,7 +27,7 @@
     "hooks/": "./hooks/",
     "islands/": "./islands/",
     "lib/": "./lib/",
-    "preact": "npm:preact@10.26.0",
+    "preact": "npm:preact@10.26.2",
     "routes/": "./routes/",
     "tailwindcss": "npm:tailwindcss@3.4.14",
     "tailwindcss/": "npm:/tailwindcss@3.4.14/",
