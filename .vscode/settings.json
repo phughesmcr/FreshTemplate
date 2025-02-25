@@ -16,5 +16,17 @@
   },
   "css.customData": [
     ".vscode/tailwind.json"
+  ],
+  "cSpell.words": [
+    "fontobject",
+    "msword",
+    "noopen",
+    "nosniff",
+    "officedocument",
+    "openxmlformats",
+    "presentationml",
+    "spreadsheetml",
+    "takker",
+    "wordprocessingml"
   ]
 }

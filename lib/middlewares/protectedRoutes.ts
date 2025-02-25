@@ -129,6 +129,7 @@ interface JWTPayload {
  * @param token The token to verify
  * @returns The decoded payload or null if invalid
  */
+// deno-lint-ignore require-await
 async function verifyToken(token: string): Promise<JWTPayload | null> {
   try {
     // This is a placeholder - implement with your JWT library
