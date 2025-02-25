@@ -86,10 +86,8 @@ export default function App({ Component }: PageProps) {
 
         <link rel="stylesheet" href={asset("/styles.css")} />
 
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: `${JSON.stringify(JSONLD)}` }}
-        >
+        <script type="application/ld+json">
+          {JSON.stringify(JSONLD)}
         </script>
         {
           /* {
