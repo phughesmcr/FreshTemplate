@@ -1,5 +1,5 @@
 import { asset } from "$fresh/runtime.ts";
-import { type PageProps } from "$fresh/server.ts";
+import type { PageProps } from "$fresh/server.ts";
 
 const JSONLD = {
   "@context": "http://www.schema.org",

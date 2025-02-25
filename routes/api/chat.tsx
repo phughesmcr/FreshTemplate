@@ -19,7 +19,7 @@ export const handler: Handlers<ChatRequest | null> = {
   async POST(req, _ctx): Promise<Response> {
     try {
       if (!openai) {
-        return new Response(JSON.stringify({ text: "", error: "Transcription service unavailable" }), {
+        return new Response(JSON.stringify({ text: "", error: "Chat completion service unavailable" }), {
           status: 503,
           headers: { "Content-Type": "application/json" },
         });

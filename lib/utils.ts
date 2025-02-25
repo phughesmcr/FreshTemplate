@@ -1,9 +1,9 @@
-export const safelyAwait = async <T, E = Error>(promise: Promise<T>): Promise<[null, T] | [E, null]> => {
+export const safelyAwait = async <T>(promise: Promise<T>): Promise<[null, T] | [Error, null]> => {
   try {
     const result = await promise;
     return [null, result];
   } catch (error) {
-    return [error, null];
+    return [error as Error, null];
   }
 };
 
