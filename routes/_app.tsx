@@ -77,23 +77,7 @@ export default function App({ Component }: PageProps) {
         <script type="application/ld+json">
           {JSON.stringify(WebsiteMetadata.JSONLD)}
         </script>
-        {
-          /* {
-        <script dangerouslySetInnerHTML={
-          {__html: `
-            if ('serviceWorker' in navigator) {
-              window.addEventListener('load', function() {
-                navigator.serviceWorker.register('/sw.js').then(function(registration) {
-                  console.log('ServiceWorker registration successful with scope: ', registration.scope);
-                }, function(err) {
-                  console.log('ServiceWorker registration failed: ', err);
-                });
-              });
-            }
-          `}}>
-        </script>
-        } */
-        }
+        {WebsiteMetadata.SERVICE_WORKER_ENABLED && <script src={asset("/sw-register.js")}></script>}
       </head>
       <body>
         <Component />

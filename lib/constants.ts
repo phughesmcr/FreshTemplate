@@ -402,6 +402,11 @@ export const WebsiteMetadata = {
    * Default theme color for the website
    */
   THEME_COLOR: "#1881F2",
+
+  /**
+   * Whether the caching service worker is enabled
+   */
+  SERVICE_WORKER_ENABLED: true,
 };
 
 /**
