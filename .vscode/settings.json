@@ -18,14 +18,25 @@
     ".vscode/tailwind.json"
   ],
   "cSpell.words": [
+    "asynciterable",
+    "cursorrules",
+    "dcterms",
+    "dotenv",
+    "foaf",
     "fontobject",
+    "hintrc",
+    "mstile",
     "msword",
     "noopen",
     "nosniff",
+    "nums",
     "officedocument",
     "openxmlformats",
     "presentationml",
+    "rdfa",
+    "rdfs",
     "spreadsheetml",
+    "supabase",
     "takker",
     "wordprocessingml"
   ]
