@@ -1,15 +1,15 @@
 # Fresh project
 
 Your new Fresh project is ready to go. You can follow the Fresh "Getting Started" guide here:
-https://fresh.deno.dev/docs/getting-started
+<https://fresh.deno.dev/docs/getting-started>
 
-### Usage
+## Usage
 
-Make sure to install Deno: https://deno.land/manual/getting_started/installation
+Make sure to install Deno: <https://deno.land/manual/getting_started/installation>
 
 Then start the project:
 
-```
+```bash
 deno task start
 ```
 
@@ -17,9 +17,10 @@ This will watch the project directory and restart as necessary.
 
 ## Required ENV variables
 
-```
+```bash
 APP_KEY
 OPENAI_API_KEY
 OPENAI_ORGANIZATION
 OPENAI_PROJECT
+KV_ADMIN_KEY
 ```

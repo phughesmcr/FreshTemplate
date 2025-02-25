@@ -4,7 +4,7 @@ import { encodeBase64 } from "@std/encoding";
 import { VoiceSynthesis } from "lib/constants.ts";
 
 /**
- * @module voicesynth
+ * @module routes/api/speak.tsx
  * @description This module provides a way to interact with the OpenAI TTS API.
  */
 
