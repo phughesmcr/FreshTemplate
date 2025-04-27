@@ -1,6 +1,6 @@
 import type { FreshContext } from "$fresh/server.ts";
-import type { ServerState } from "lib/middlewares/state.ts";
 import { HttpStatus, Timeout } from "lib/constants.ts";
+import type { ServerState } from "lib/middlewares/state.ts";
 
 export interface TimeoutOptions {
   /** Default timeout in milliseconds */

@@ -1,7 +1,7 @@
 import type { FreshContext } from "$fresh/server.ts";
 import { cookieSession, type WithSession } from "fresh-session";
-import type { User } from "lib/types.ts";
 import { Session } from "lib/constants.ts";
+import type { User } from "lib/types.ts";
 
 /**
  * Server state interface that extends the session state with application-specific properties

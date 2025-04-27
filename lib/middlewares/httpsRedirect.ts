@@ -1,6 +1,6 @@
 import type { FreshContext } from "$fresh/server.ts";
-import type { ServerState } from "lib/middlewares/state.ts";
 import { HttpsRedirect } from "lib/constants.ts";
+import type { ServerState } from "lib/middlewares/state.ts";
 
 export interface HttpsRedirectOptions {
   /** Enable/disable the redirect */

@@ -1,6 +1,6 @@
 import type { FreshContext } from "$fresh/server.ts";
-import type { ServerState } from "lib/middlewares/state.ts";
 import { HttpStatus, RateLimit } from "lib/constants.ts";
+import type { ServerState } from "lib/middlewares/state.ts";
 
 interface RateLimitEntry {
   readonly bucket: number;

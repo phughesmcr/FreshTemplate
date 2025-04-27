@@ -1,8 +1,8 @@
 import type { FreshContext } from "$fresh/server.ts";
 import { compress as brotliCompress } from "brotli";
 import { gzip } from "compress";
-import type { ServerState } from "lib/middlewares/state.ts";
 import { Compression } from "lib/constants.ts";
+import type { ServerState } from "lib/middlewares/state.ts";
 
 export interface CompressionOptions {
   /** MIME types that should be compressed */

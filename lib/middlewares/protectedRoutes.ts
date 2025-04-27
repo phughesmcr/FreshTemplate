@@ -1,8 +1,8 @@
 import type { FreshContext } from "$fresh/server.ts";
 import { deleteCookie, getCookies } from "@std/http";
 import { isAbsolute, join, normalize } from "@std/path";
-import type { ServerState } from "lib/middlewares/state.ts";
 import { ProtectedRoutes } from "lib/constants.ts";
+import type { ServerState } from "lib/middlewares/state.ts";
 
 // Define protected routes with more granular permissions
 export const PROTECTED_ROUTES = ProtectedRoutes.PATHS;

@@ -1,5 +1,5 @@
-import { JSX } from "preact";
 import { IS_BROWSER } from "$fresh/runtime.ts";
+import { JSX } from "preact";
 
 interface ButtonProps extends JSX.HTMLAttributes<HTMLButtonElement> {
   disabled?: boolean;

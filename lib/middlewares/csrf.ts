@@ -1,9 +1,9 @@
 import type { FreshContext } from "$fresh/server.ts";
 import { getCookies, setCookie } from "$std/http/cookie.ts";
 import { encodeBase64 } from "@std/encoding";
+import { CSRF } from "lib/constants.ts";
 import { PROTECTED_ROUTES } from "lib/middlewares/protectedRoutes.ts";
 import type { ServerState } from "lib/middlewares/state.ts";
-import { CSRF } from "lib/constants.ts";
 
 const SAFE_METHODS = CSRF.CONFIG.safeMethods;
 type SafeMethod = typeof SAFE_METHODS[number];
